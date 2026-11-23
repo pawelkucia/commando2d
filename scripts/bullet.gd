@@ -45,9 +45,8 @@ func _on_body_entered(body: Node) -> void:
 func _draw() -> void:
 	var s := 4.0 if big else 3.0
 	var o := -s / 2.0
-	if from_player:
-		draw_rect(Rect2(o, o, s, s), Color(1, 0.9, 0.3))
-		draw_rect(Rect2(o + 1, o + 1, 1, 1), Color.WHITE)
-	else:
-		draw_rect(Rect2(o, o, s, s), Color(1, 0.3, 0.2))
-		draw_rect(Rect2(o + 1, o + 1, 1, 1), Color(1, 0.85, 0.5))
+	var core := Color(1, 0.9, 0.3) if from_player else Color(1, 0.3, 0.2)
+	draw_circle(Vector2.ZERO, s + 1.5, Color(core.r, core.g, core.b, 0.25)) # poświata
+	draw_rect(Rect2(-dir * 3.0 - Vector2(1, 1), Vector2(2, 2)), Color(core.r, core.g, core.b, 0.4)) # smuga
+	draw_rect(Rect2(o, o, s, s), core)
+	draw_rect(Rect2(o + 1, o + 1, 1, 1), Color.WHITE if from_player else Color(1, 0.85, 0.5))

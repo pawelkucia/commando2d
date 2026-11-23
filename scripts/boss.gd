@@ -41,7 +41,7 @@ func _physics_process(delta: float) -> void:
 		if flash <= 0.0:
 			sprite.modulate = Color.WHITE
 	if not active:
-		if player.global_position.y < global_position.y + 250.0:
+		if player.global_position.y < global_position.y + 300.0:
 			active = true
 		return
 	t += delta

@@ -21,7 +21,7 @@ func _ready() -> void:
 	add_child(sprite)
 	var shape := CollisionShape2D.new()
 	var rect := RectangleShape2D.new()
-	rect.size = Vector2(26, 12)
+	rect.size = Vector2(30, 18)
 	shape.shape = rect
 	shape.position = Vector2(0, 2)
 	add_child(shape)
@@ -35,7 +35,7 @@ func _physics_process(delta: float) -> void:
 	if player == null or not is_instance_valid(player):
 		return
 	var to_player := player.global_position - global_position
-	if to_player.length() > 170.0:
+	if to_player.length() > 200.0:
 		return
 	shoot_cd -= delta
 	if shoot_cd <= 0.0:
@@ -52,7 +52,7 @@ func _physics_process(delta: float) -> void:
 			b.from_player = false
 			b.dir = dir
 			get_tree().current_scene.add_child(b)
-			b.global_position = global_position + dir * 18.0 # poza kolizją bunkra
+			b.global_position = global_position + dir * 24.0 # poza kolizją bunkra
 			Sfx.play("enemy_shoot")
 
 

@@ -3,52 +3,93 @@ extends Node
 ## Proceduralne efekty dźwiękowe i muzyka (chiptune) — bez plików audio.
 
 const RATE := 22050
+const SETTINGS_PATH := "user://settings.cfg"
+const SOUND_NAMES := ["shoot", "enemy_shoot", "throw", "explosion", "die", "hit",
+	"boss_hit", "pickup", "rescue", "gameover", "win", "shout_help", "shout_hey"]
 
 static var inst: Sfx
 static var sounds := {}
 static var music_stream: AudioStreamWAV
+static var music_on := true
+static var settings_loaded := false
 
 var players: Array[AudioStreamPlayer] = []
 var next_player := 0
 var music: AudioStreamPlayer
-var muted := false
+var ended := false # muzyka zatrzymana na koniec gry — nie wznawiaj jej przełącznikiem
 
 
 func _ready() -> void:
 	inst = self
+	if not settings_loaded:
+		settings_loaded = true
+		var cfg := ConfigFile.new()
+		if cfg.load(SETTINGS_PATH) == OK:
+			music_on = bool(cfg.get_value("audio", "music", true))
 	for i in 8:
 		var p := AudioStreamPlayer.new()
 		p.volume_db = -4.0
 		add_child(p)
 		players.append(p)
 	if sounds.is_empty():
-		_build_sounds()
-		music_stream = _build_music()
+		_load_or_build()
 	music = AudioStreamPlayer.new()
 	music.stream = music_stream
 	music.volume_db = -12.0
 	add_child(music)
-	music.play()
+	if music_on:
+		music.play()
 
 
-static func play(sound: String) -> void:
-	if not is_instance_valid(inst) or inst.muted or not sounds.has(sound):
+## Ładuje gotowe pliki res://audio/*.wav (generuje je tools/generate_audio.gd).
+## Gdyby ich brakowało, syntezuje dźwięki w locie, jak wcześniej.
+static func _load_or_build() -> void:
+	for n in SOUND_NAMES:
+		var path := "res://audio/%s.wav" % n
+		if ResourceLoader.exists(path):
+			sounds[n] = load(path)
+	if sounds.size() < SOUND_NAMES.size():
+		push_warning("Sfx: brak plików audio, generuję dźwięki w locie")
+		_build_sounds()
+	if ResourceLoader.exists("res://audio/music.wav"):
+		music_stream = load("res://audio/music.wav")
+	else:
+		music_stream = _build_music()
+	if music_stream.loop_mode == AudioStreamWAV.LOOP_DISABLED:
+		music_stream.loop_mode = AudioStreamWAV.LOOP_FORWARD
+		music_stream.loop_begin = 0
+		music_stream.loop_end = int(music_stream.get_length() * music_stream.mix_rate)
+
+
+static func play(sound: String, pitch := 1.0) -> void:
+	if not is_instance_valid(inst) or not sounds.has(sound):
 		return
 	var p := inst.players[inst.next_player]
 	inst.next_player = (inst.next_player + 1) % inst.players.size()
 	p.stream = sounds[sound]
+	p.pitch_scale = pitch # np. każdy jeniec ma trochę inny głos
 	p.play()
 
 
-static func toggle_mute() -> void:
+## Włącza/wyłącza muzykę w tle (efekty dźwiękowe zostają). Wybór jest zapamiętywany.
+static func toggle_music() -> void:
+	music_on = not music_on
+	var cfg := ConfigFile.new()
+	cfg.load(SETTINGS_PATH) # zachowaj pozostałe ustawienia (np. język)
+	cfg.set_value("audio", "music", music_on)
+	cfg.save(SETTINGS_PATH)
 	if not is_instance_valid(inst):
 		return
-	inst.muted = not inst.muted
-	inst.music.stream_paused = inst.muted
+	if music_on:
+		if not inst.ended and not inst.music.playing:
+			inst.music.play()
+	else:
+		inst.music.stop()
 
 
 static func stop_music() -> void:
 	if is_instance_valid(inst):
+		inst.ended = true
 		inst.music.stop()
 
 
@@ -154,6 +195,77 @@ static func _build_sounds() -> void:
 		_tone(698, 698, 0.4, "pulse", 0.25, 0.0, 0.8),
 		_tone(659, 659, 0.14, "pulse", 0.25, 0.0, 0.5),
 		_tone(784, 784, 0.6, "pulse", 0.25, 0.0, 0.8)]))
+	_shouts()
+
+
+## Prosty syntezator mowy (formanty). keys: [czas, wysokość głosu, F1, F2, F3, głośność, szum]
+## — wartości są interpolowane między klatkami kluczowymi. Szum to oddech ("h") i chrypka.
+static func _voice(keys: Array, dur: float) -> PackedFloat32Array:
+	var n := int(dur * RATE)
+	var out := PackedFloat32Array()
+	out.resize(n)
+	var ph := 0.0
+	var st := [[0.0, 0.0], [0.0, 0.0], [0.0, 0.0]] # stany trzech rezonatorów
+	var bw := [90.0, 120.0, 180.0]
+	var gains := [1.0, 0.55, 0.3]
+	var k := 0
+	var peak := 0.001
+	for i in n:
+		var tt := float(i) / RATE
+		while k < keys.size() - 2 and tt > keys[k + 1][0]:
+			k += 1
+		var a: Array = keys[k]
+		var b: Array = keys[k + 1]
+		var u := clampf((tt - a[0]) / maxf(b[0] - a[0], 0.0001), 0.0, 1.0)
+		var v := []
+		for j in range(1, 7):
+			v.append(lerpf(a[j], b[j], u))
+		# wysokość z lekkim vibrato i drżeniem (krzyk nie jest równy)
+		var f0: float = v[0] * (1.0 + 0.03 * sin(tt * TAU * 6.0) + randf_range(-0.01, 0.01))
+		ph += f0 / RATE
+		var glottal := 1.0 - 2.0 * fposmod(ph, 1.0) # piła = źródło głosu
+		var src: float = glottal * (1.0 - v[5]) + randf_range(-1.0, 1.0) * v[5]
+		var y := 0.0
+		for f in 3:
+			var r := exp(-PI * bw[f] / RATE)
+			var c := 2.0 * r * cos(TAU * v[f + 1] / RATE)
+			var o: float = (1.0 - r) * src + c * st[f][0] - r * r * st[f][1]
+			st[f][1] = st[f][0]
+			st[f][0] = o
+			y += o * gains[f]
+		y *= v[4]
+		out[i] = y
+		peak = maxf(peak, absf(y))
+	for i in n:
+		out[i] = out[i] / peak * 0.6
+	return out
+
+
+## Okrzyki jeńca: "HELP!" (z wybuchowym "p" na końcu) i "HEY!".
+static func _shouts() -> void:
+	var help := _voice([
+		[0.00, 300, 650, 1800, 2600, 0.0, 1.0],  # h — wydech
+		[0.06, 300, 650, 1800, 2600, 0.45, 0.85],
+		[0.10, 330, 680, 1850, 2600, 1.0, 0.12], # e
+		[0.26, 370, 640, 1800, 2550, 1.0, 0.1],
+		[0.40, 330, 560, 1700, 2500, 0.9, 0.1],
+		[0.47, 290, 380, 1000, 2400, 0.55, 0.05], # l
+		[0.53, 270, 360, 900, 2400, 0.0, 0.0],   # zamknięcie ust przed "p"
+		[0.64, 270, 360, 900, 2400, 0.0, 0.0]], 0.64)
+	var burst := _noise(0.05, 0.35, 2.5, 0.6, 0.2) # "p"
+	var at := int(0.57 * RATE)
+	for i in burst.size():
+		if at + i < help.size():
+			help[at + i] += burst[i]
+	sounds["shout_help"] = _wav(help)
+	sounds["shout_hey"] = _wav(_voice([
+		[0.00, 320, 600, 1900, 2600, 0.0, 1.0],  # h
+		[0.05, 320, 600, 1900, 2600, 0.5, 0.8],
+		[0.09, 350, 620, 1950, 2650, 1.0, 0.1],  # e...
+		[0.22, 400, 520, 2050, 2700, 1.0, 0.1],
+		[0.36, 360, 300, 2350, 3000, 0.35, 0.08], # ...j (i)
+		[0.46, 300, 280, 2350, 3000, 0.0, 0.0],
+		[0.50, 300, 280, 2350, 3000, 0.0, 0.0]], 0.5))
 
 
 static func _build_music() -> AudioStreamWAV:

@@ -16,16 +16,18 @@ compatibility/default_parent_skeleton_in_mesh_instance_3d=true
 
 config/name="Commando"
 run/main_scene="res://scenes/title.tscn"
+config/icon="res://icon.png"
 config/features=PackedStringArray("4.7", "GL Compatibility")
 
 [display]
 
-window/size/viewport_width=256
-window/size/viewport_height=224
-window/size/window_width_override=768
-window/size/window_height_override=672
-window/stretch/mode="viewport"
-window/stretch/scale_mode="integer"
+window/size/viewport_width=224
+window/size/viewport_height=400
+window/size/window_width_override=336
+window/size/window_height_override=600
+window/stretch/mode="canvas_items"
+window/stretch/aspect="keep_width"
+window/handheld/orientation=1
 
 [layer_names]
 
@@ -38,12 +40,14 @@ window/stretch/scale_mode="integer"
 
 [gui]
 
-theme/default_font_antialiasing=0
-theme/default_font_hinting=0
+theme/default_font_antialiasing=1
 
 [rendering]
 
 textures/canvas_textures/default_texture_filter=0
+textures/vram_compression/import_etc2_astc=true
+2d/snap/snap_2d_transforms_to_pixel=true
+2d/snap/snap_2d_vertices_to_pixel=true
 renderer/rendering_method="gl_compatibility"
 renderer/rendering_method.mobile="gl_compatibility"
 environment/defaults/default_clear_color=Color(0, 0, 0, 1)

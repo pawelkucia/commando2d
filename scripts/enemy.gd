@@ -5,7 +5,7 @@ extends CharacterBody2D
 
 signal died(points: int)
 
-const ACTIVE_DIST := 190.0
+const ACTIVE_DIST := 240.0
 const POINTS := {"grunt": 100, "sniper": 300, "grenadier": 200, "biker": 150}
 
 var kind := "grunt"
@@ -25,7 +25,9 @@ func _ready() -> void:
 	strafe = 1.0 if randf() < 0.5 else -1.0
 	if kind == "sniper":
 		shoot_cd = randf_range(1.5, 3.0)
+	Sprites.add_shadow(self, 16.0 if kind == "biker" else 14.0, 9.0 if kind == "biker" else 7.0)
 	sprite = Sprite2D.new()
+	sprite.position = Vector2(0, -4)
 	add_child(sprite)
 	if kind == "biker":
 		sprite.texture = Sprites.biker(0)
@@ -33,7 +35,7 @@ func _ready() -> void:
 		Sprites.set_soldier(sprite, kind, Vector2.DOWN, 0.0, false)
 	var shape := CollisionShape2D.new()
 	var rect := RectangleShape2D.new()
-	rect.size = Vector2(9, 9)
+	rect.size = Vector2(10, 12)
 	shape.shape = rect
 	add_child(shape)
 
@@ -63,7 +65,7 @@ func _physics_process(delta: float) -> void:
 			else:
 				velocity = dir.orthogonal() * strafe * 28.0
 			moving = true
-			if dist < 170.0 and shoot_cd <= 0.0:
+			if dist < 190.0 and shoot_cd <= 0.0:
 				shoot_cd = randf_range(1.6, 3.2)
 				_fire(dir.rotated(randf_range(-0.12, 0.12)), 90.0, false)
 		"sniper":
@@ -99,7 +101,7 @@ func _physics_process(delta: float) -> void:
 
 func _biker(delta: float, dist: float) -> void:
 	if not active:
-		if dist < 260.0:
+		if dist < 300.0:
 			active = true
 		else:
 			return
@@ -107,7 +109,7 @@ func _biker(delta: float, dist: float) -> void:
 	walk_t += delta
 	sprite.texture = Sprites.biker(int(walk_t * 10.0) % 2)
 	var d := player.global_position - global_position
-	if absf(d.x) < 9.0 and absf(d.y) < 11.0:
+	if absf(d.x) < 11.0 and absf(d.y) < 14.0:
 		player.take_hit(2) # taranowanie motocyklem
 	if global_position.y > player.global_position.y + 200.0:
 		queue_free()
@@ -121,7 +123,7 @@ func _fire(dir: Vector2, speed: float, big: bool) -> void:
 	b.big = big
 	b.dmg = 2 if big else 1 # pocisk snajpera boli bardziej
 	get_tree().current_scene.add_child(b)
-	b.global_position = global_position + dir * 8.0
+	b.global_position = global_position + dir * 10.0 + Vector2(0, -3)
 	Sfx.play("enemy_shoot")
 
 
